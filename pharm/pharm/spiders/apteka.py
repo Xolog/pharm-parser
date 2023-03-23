@@ -3,7 +3,8 @@ from scrapy import Request
 from scrapy.http import HtmlResponse
 from datetime import datetime
 from bs4 import BeautifulSoup as bs
-from re import sub
+import re
+from collections import defaultdict
 
 
 class AptekaSpider(scrapy.Spider):
@@ -61,7 +62,7 @@ class AptekaSpider(scrapy.Spider):
     def __clear_text(dirty_text):
         # чистим все лишние символы и колличество пробелов больше двух
         dirty_char = '[\r\t\n\xa0­ ​₽]|\s{2,}'
-        text_list = [sub(dirty_char, '', item) for item in dirty_text]
+        text_list = [re.sub(dirty_char, '', item) for item in dirty_text]
 
         return text_list
 
@@ -119,16 +120,23 @@ class AptekaSpider(scrapy.Spider):
 
     def get_metadata(self, response):
         description = response.xpath("//div[@itemprop='description']/*").getall()
-
-        description = [bs(string, 'lxml').get_text() for string in description]
+        description = [bs(string, 'lxml').get_text().lower() for string in description]
         description = self.__clear_text(description)
-        description = ' '.join(description)
 
-        return {
-            "__description": description,
-            "АРТИКУЛ": response.url.split('_')[-1],
-            "СТРАНА ПРОИЗВОДИТЕЛЬ": response.xpath("//span[@itemtype='location']/text()").get()
-        }
+        metadata = defaultdict(str)
+        metadata['__description'] = ' '.join(description)
+        metadata['АРТИКУЛ'] = response.url.split('_')[-1]
+        metadata['СТРАНА ПРОИЗВОДИТЕЛЬ'] = response.xpath("//span[@itemtype='location']/text()").get()
+
+        key = None
+        keys = re.compile("противопоказания|применение|состав|показания|выпуска|действующее вещество|описание|фармакологическое действие")
+        for string in description:
+            if keys.search(string):
+                key = string
+            else:
+                metadata[key] += string
+
+        return metadata
 
     GOODS_HREFS = "//div[@class='goods-grid__inner']/div//a[@class='goods-card__link']/@href"
     MARKETING_TAGS = "//span[@class='ui-tag text text_weight_medium ui-tag_theme_secondary']/text()"
