@@ -1,0 +1,1 @@
+# Scrapy parser for pharmacy
